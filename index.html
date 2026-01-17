@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minesweeper</title>
+    <title>Minesweeper with Seeds</title>
     <style>
         * {
             margin: 0;
@@ -30,6 +30,7 @@
             border-radius: 10px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             border: 3px solid #808080;
+            max-width: 800px;
         }
         
         .header {
@@ -135,7 +136,7 @@
             margin-top: 20px;
             color: white;
             text-align: center;
-            max-width: 300px;
+            width: 100%;
         }
         
         h1 {
@@ -143,12 +144,15 @@
             margin-bottom: 15px;
             text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             font-size: 2.5rem;
+            text-align: center;
         }
         
         .difficulty {
             margin-top: 20px;
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
         
         .difficulty button {
@@ -171,6 +175,69 @@
             box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
         }
         
+        .seed-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            width: 100%;
+        }
+        
+        .seed-input {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .seed-input label {
+            color: white;
+            font-weight: bold;
+        }
+        
+        .seed-input input {
+            padding: 8px 12px;
+            border: 2px solid #4a6fa5;
+            border-radius: 5px;
+            width: 150px;
+            font-size: 16px;
+            background-color: #f0f0f0;
+        }
+        
+        .seed-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .seed-controls button {
+            padding: 8px 15px;
+            background-color: #5a7fb5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .seed-controls button:hover {
+            background-color: #6a8fc5;
+        }
+        
+        .current-seed {
+            margin-top: 10px;
+            color: #aaffaa;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
         .instructions {
             background-color: rgba(255, 255, 255, 0.1);
             padding: 15px;
@@ -178,6 +245,7 @@
             margin-top: 20px;
             color: #ddd;
             font-size: 0.9rem;
+            width: 100%;
         }
         
         .instructions ul {
@@ -187,6 +255,13 @@
         
         .instructions li {
             margin-bottom: 5px;
+        }
+        
+        .instructions code {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
         }
         
         @media (max-width: 768px) {
@@ -204,12 +279,16 @@
             h1 {
                 font-size: 2rem;
             }
+            
+            .seed-controls {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>MINESWEEPER</h1>
+        <h1>MINESWEEPER WITH SEEDS</h1>
         
         <div class="header">
             <div class="counter" id="mine-counter">010</div>
@@ -227,6 +306,22 @@
             <button id="hard">Hard (16×30)</button>
         </div>
         
+        <div class="seed-controls">
+            <div class="seed-input">
+                <label for="seed-input">Seed:</label>
+                <input type="text" id="seed-input" placeholder="Enter seed number" value="3905329">
+            </div>
+            <div class="seed-buttons">
+                <button id="apply-seed">Apply Seed</button>
+                <button id="random-seed">Random Seed</button>
+                <button id="copy-seed">Copy Seed</button>
+            </div>
+        </div>
+        
+        <div class="current-seed" id="current-seed">
+            Current Seed: 3905329
+        </div>
+        
         <div class="game-info">
             <div class="instructions">
                 <p><strong>How to Play:</strong></p>
@@ -235,6 +330,8 @@
                     <li><strong>Right-click</strong> to place/remove a flag</li>
                     <li>Numbers indicate how many mines are in adjacent cells</li>
                     <li>Flag all mines and reveal all safe cells to win!</li>
+                    <li><strong>Seed Feature:</strong> Enter any number to generate the same mine layout. Share seeds with friends to play the exact same game!</li>
+                    <li>Try seeds like <code>123456</code>, <code>777777</code>, or <code>3905329</code> (example seed)</li>
                 </ul>
             </div>
         </div>
@@ -260,7 +357,10 @@
             firstClick: true,
             mineCount: difficulties.easy.mines,
             timer: 0,
-            timerInterval: null
+            timerInterval: null,
+            currentSeed: 3905329,
+            seededGame: false,
+            firstClickPosition: null
         };
         
         // DOM elements
@@ -268,14 +368,36 @@
         const mineCounter = document.getElementById('mine-counter');
         const timerElement = document.getElementById('timer');
         const smiley = document.getElementById('smiley');
+        const seedInput = document.getElementById('seed-input');
+        const currentSeedDisplay = document.getElementById('current-seed');
         const difficultyButtons = {
             easy: document.getElementById('easy'),
             medium: document.getElementById('medium'),
             hard: document.getElementById('hard')
         };
         
+        // Seeded random number generator (Mulberry32 algorithm)
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            // Generate a random float between 0 and 1
+            next() {
+                let t = this.seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+            
+            // Generate a random integer between min (inclusive) and max (exclusive)
+            nextInt(min, max) {
+                return Math.floor(this.next() * (max - min)) + min;
+            }
+        }
+        
         // Initialize game
-        function initGame(difficulty = 'easy') {
+        function initGame(difficulty = 'easy', seed = null) {
             // Reset game state
             gameState.difficulty = difficulty;
             gameState.board = [];
@@ -287,6 +409,14 @@
             gameState.firstClick = true;
             gameState.mineCount = difficulties[difficulty].mines;
             gameState.timer = 0;
+            gameState.firstClickPosition = null;
+            
+            // Set seed (use provided seed or current seed)
+            if (seed !== null) {
+                gameState.currentSeed = parseInt(seed) || 3905329;
+                gameState.seededGame = true;
+                seedInput.value = gameState.currentSeed;
+            }
             
             // Clear timer
             if (gameState.timerInterval) {
@@ -298,6 +428,7 @@
             updateMineCounter();
             timerElement.textContent = '000';
             smiley.textContent = '😊';
+            currentSeedDisplay.textContent = `Current Seed: ${gameState.currentSeed}`;
             
             // Set active difficulty button
             Object.keys(difficultyButtons).forEach(key => {
@@ -345,28 +476,64 @@
             }
         }
         
-        // Generate mines (avoiding the first clicked cell)
+        // Generate mines using seeded randomness
         function generateMines(firstRow, firstCol) {
             const { rows, cols } = difficulties[gameState.difficulty];
             const minesCount = gameState.mineCount;
             
+            // Store first click position for seeded games
+            if (gameState.seededGame) {
+                gameState.firstClickPosition = { row: firstRow, col: firstCol };
+            }
+            
             // Clear existing mines
             gameState.mines = [];
             
-            // Generate mine positions
-            while (gameState.mines.length < minesCount) {
-                const row = Math.floor(Math.random() * rows);
-                const col = Math.floor(Math.random() * cols);
+            // Create seeded random generator
+            const random = new SeededRandom(gameState.currentSeed);
+            
+            // For seeded games, we need consistent mine placement
+            if (gameState.seededGame) {
+                // Generate all possible positions
+                let allPositions = [];
+                for (let row = 0; row < rows; row++) {
+                    for (let col = 0; col < cols; col++) {
+                        // Skip first click cell and adjacent cells
+                        const isFirstClickCell = row === firstRow && col === firstCol;
+                        const isAdjacentToFirstClick = Math.abs(row - firstRow) <= 1 && Math.abs(col - firstCol) <= 1;
+                        
+                        if (!isFirstClickCell && !isAdjacentToFirstClick) {
+                            allPositions.push({ row, col });
+                        }
+                    }
+                }
                 
-                // Don't place mine on first click cell or cells around it
-                const isFirstClickCell = row === firstRow && col === firstCol;
-                const isAdjacentToFirstClick = Math.abs(row - firstRow) <= 1 && Math.abs(col - firstCol) <= 1;
+                // Shuffle positions using seeded randomness
+                for (let i = allPositions.length - 1; i > 0; i--) {
+                    const j = Math.floor(random.next() * (i + 1));
+                    [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
+                }
                 
-                // Don't place mine if it already exists in this position
-                const mineExists = gameState.mines.some(mine => mine.row === row && mine.col === col);
-                
-                if (!isFirstClickCell && !isAdjacentToFirstClick && !mineExists) {
-                    gameState.mines.push({ row, col });
+                // Take first N positions as mines
+                for (let i = 0; i < minesCount && i < allPositions.length; i++) {
+                    gameState.mines.push(allPositions[i]);
+                }
+            } else {
+                // Non-seeded random mine placement (original algorithm)
+                while (gameState.mines.length < minesCount) {
+                    const row = Math.floor(Math.random() * rows);
+                    const col = Math.floor(Math.random() * cols);
+                    
+                    // Don't place mine on first click cell or cells around it
+                    const isFirstClickCell = row === firstRow && col === firstCol;
+                    const isAdjacentToFirstClick = Math.abs(row - firstRow) <= 1 && Math.abs(col - firstCol) <= 1;
+                    
+                    // Don't place mine if it already exists in this position
+                    const mineExists = gameState.mines.some(mine => mine.row === row && mine.col === col);
+                    
+                    if (!isFirstClickCell && !isAdjacentToFirstClick && !mineExists) {
+                        gameState.mines.push({ row, col });
+                    }
                 }
             }
             
@@ -575,20 +742,67 @@
             }
         }
         
-        // Reset game
+        // Generate a random seed
+        function generateRandomSeed() {
+            return Math.floor(Math.random() * 10000000);
+        }
+        
+        // Copy current seed to clipboard
+        function copySeedToClipboard() {
+            navigator.clipboard.writeText(gameState.currentSeed.toString())
+                .then(() => {
+                    const originalText = currentSeedDisplay.textContent;
+                    currentSeedDisplay.textContent = "Seed copied to clipboard!";
+                    currentSeedDisplay.style.color = "#ffff00";
+                    
+                    setTimeout(() => {
+                        currentSeedDisplay.textContent = originalText;
+                        currentSeedDisplay.style.color = "#aaffaa";
+                    }, 2000);
+                })
+                .catch(err => {
+                    console.error('Failed to copy seed: ', err);
+                    alert('Failed to copy seed to clipboard');
+                });
+        }
+        
+        // Event listeners
         smiley.addEventListener('click', () => {
-            initGame(gameState.difficulty);
+            initGame(gameState.difficulty, gameState.currentSeed);
         });
         
         // Difficulty buttons
         Object.keys(difficultyButtons).forEach(difficulty => {
             difficultyButtons[difficulty].addEventListener('click', () => {
-                initGame(difficulty);
+                initGame(difficulty, gameState.currentSeed);
             });
         });
         
+        // Seed controls
+        document.getElementById('apply-seed').addEventListener('click', () => {
+            const seed = seedInput.value.trim();
+            if (seed) {
+                initGame(gameState.difficulty, seed);
+            }
+        });
+        
+        document.getElementById('random-seed').addEventListener('click', () => {
+            const newSeed = generateRandomSeed();
+            seedInput.value = newSeed;
+            initGame(gameState.difficulty, newSeed);
+        });
+        
+        document.getElementById('copy-seed').addEventListener('click', copySeedToClipboard);
+        
+        // Allow pressing Enter in seed input
+        seedInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('apply-seed').click();
+            }
+        });
+        
         // Initialize the game
-        initGame('easy');
+        initGame('easy', 3905329);
     </script>
 </body>
 </html>
